@@ -344,6 +344,7 @@
             <span class="fm-brand">Fairness Meter</span>
           </div>
           <div class="fm-header-actions">
+            <button class="fm-btn-icon" id="fm-refresh-btn" title="Refresh analysis">↻</button>
             <button class="fm-btn-icon" id="fm-toggle-btn" title="Minimize">−</button>
             <button class="fm-btn-icon" id="fm-close-btn" title="Close">✕</button>
           </div>
@@ -421,6 +422,10 @@
 
     root.querySelector('#fm-close-btn').addEventListener('click', () => root.remove());
 
+    root.querySelector('#fm-refresh-btn').addEventListener('click', () => {
+      run({ forceRefresh: true });
+    });
+
     let collapsed = false;
     const body = root.querySelector('#fm-body');
     root.querySelector('#fm-toggle-btn').addEventListener('click', (e) => {
@@ -429,8 +434,35 @@
       e.currentTarget.textContent = collapsed ? '+' : '−';
     });
 
-    makeDraggable(root.querySelector('#fm-card'), root.querySelector('.fm-header'));
+    const card = root.querySelector('#fm-card');
+    restoreWidgetPosition(card);
+    makeDraggable(card, root.querySelector('.fm-header'));
     return root;
+  }
+
+  // ── Widget position persistence ─────────────────────────────
+
+  const POSITION_KEY = 'fm_widget_position';
+
+  function restoreWidgetPosition(card) {
+    try {
+      chrome.storage.local.get(POSITION_KEY, (obj) => {
+        const pos = obj[POSITION_KEY];
+        if (!pos) return;
+        if (typeof pos.right === 'number') card.style.right = pos.right + 'px';
+        if (typeof pos.top === 'number') card.style.top = pos.top + 'px';
+        card.style.bottom = 'auto';
+      });
+    } catch { /* storage may be unavailable in some contexts */ }
+  }
+
+  function saveWidgetPosition(card) {
+    try {
+      const rect = card.getBoundingClientRect();
+      const right = window.innerWidth - rect.right;
+      const top = rect.top;
+      chrome.storage.local.set({ [POSITION_KEY]: { right, top } });
+    } catch { /* ignore */ }
   }
 
   function makeDraggable(card, handle) {
@@ -456,7 +488,11 @@
     });
 
     document.addEventListener('mouseup', () => {
-      if (dragging) { dragging = false; handle.style.cursor = 'grab'; }
+      if (dragging) {
+        dragging = false;
+        handle.style.cursor = 'grab';
+        saveWidgetPosition(card);
+      }
     });
   }
 
@@ -580,7 +616,7 @@
 
   // ── Main Flow ────────────────────────────────────────────────
 
-  async function run() {
+  async function run(opts = {}) {
     if (!SITE) return;
 
     await waitForContent();
@@ -606,7 +642,7 @@
     renderProduct(data);
 
     try {
-      const market = await fetchMarketData(data.title, data.rawPrice, data.imageUrl);
+      const market = await fetchMarketData(data.title, data.rawPrice, data.imageUrl, { forceRefresh: opts.forceRefresh });
       if (!market.ok) {
         if (market.error === 'NO_API_KEY') {
           renderError('Set your Claude API key in the extension popup (⚖️).');

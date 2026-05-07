@@ -69,6 +69,62 @@ async function clearCache() {
   if (keys.length) await chrome.storage.local.remove(keys);
 }
 
+// ── HTTP with retry/backoff ──────────────────────────────────
+// Retries on 429 (using retry-after header) and 5xx (exponential backoff).
+// Other 4xx are surfaced immediately as user errors.
+
+async function callClaudeWithRetry(apiKey, body, maxAttempts = 3) {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  let lastErr;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let response;
+    try {
+      response = await fetch(CLAUDE_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (networkErr) {
+      lastErr = networkErr;
+      if (attempt < maxAttempts) { await sleep(500 * attempt); continue; }
+      throw new Error(`Network error: ${networkErr.message}`);
+    }
+
+    if (response.ok) return response.json();
+
+    const status = response.status;
+    const text = await response.text();
+
+    // Retryable: 429 (rate limit) — honour retry-after
+    if (status === 429 && attempt < maxAttempts) {
+      const ra = parseInt(response.headers.get('retry-after') || '', 10);
+      const waitMs = (Number.isFinite(ra) && ra > 0 ? ra : 30) * 1000;
+      console.warn(`[FM] 429 — waiting ${waitMs}ms before retry ${attempt + 1}/${maxAttempts}`);
+      await sleep(Math.min(waitMs, 60_000));
+      continue;
+    }
+
+    // Retryable: 5xx — exponential backoff
+    if (status >= 500 && attempt < maxAttempts) {
+      const waitMs = 1000 * Math.pow(2, attempt - 1);
+      console.warn(`[FM] ${status} — backoff ${waitMs}ms before retry ${attempt + 1}/${maxAttempts}`);
+      await sleep(waitMs);
+      continue;
+    }
+
+    // Non-retryable or out of attempts
+    throw new Error(`Claude API ${status}: ${text.slice(0, 250)}`);
+  }
+
+  throw lastErr || new Error('Exhausted retries');
+}
+
 const REPORT_TOOL = {
   name: 'report_analysis',
   description: 'Submit the final product analysis. Call this exactly once after web_search research is complete.',
@@ -139,28 +195,12 @@ async function handleMarketData({ productName, listedPrice, currency, imageUrl, 
   if (imageUrl) userContent.push({ type: 'image', source: { type: 'url', url: imageUrl } });
   userContent.push({ type: 'text', text: buildPrompt(productName, listedPrice, currency, !!imageUrl) });
 
-  const response = await fetch(CLAUDE_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': anthropicApiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 3000,
-      tools: [WEB_SEARCH_TOOL, REPORT_TOOL],
-      messages: [{ role: 'user', content: userContent }],
-    }),
+  const data = await callClaudeWithRetry(anthropicApiKey, {
+    model: MODEL,
+    max_tokens: 3000,
+    tools: [WEB_SEARCH_TOOL, REPORT_TOOL],
+    messages: [{ role: 'user', content: userContent }],
   });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Claude API ${response.status}: ${text.slice(0, 250)}`);
-  }
-
-  const data = await response.json();
 
   const reportBlock = data.content?.find(b => b.type === 'tool_use' && b.name === 'report_analysis');
   if (!reportBlock) {
