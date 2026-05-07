@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Fairness Meter",
+  "version": "1.0.0",
+  "description": "Compare product prices on Facebook Marketplace and Yad2 against real market data.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "*://*.facebook.com/*",
+    "*://yad2.co.il/*",
+    "*://*.yad2.co.il/*",
+    "*://api.anthropic.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.facebook.com/*",
+        "*://yad2.co.il/*",
+        "*://*.yad2.co.il/*"
+      ],
+      "js": ["content.js"],
+      "css": ["overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Fairness Meter",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://api.anthropic.com;"
+  }
+}

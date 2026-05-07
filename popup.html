@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fairness Meter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 300px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #fff;
+      color: #111827;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo { font-size: 20px; }
+    .brand { font-size: 15px; font-weight: 700; color: #fff; }
+
+    .body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      margin-bottom: 6px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 20px;
+    }
+    .status-badge.active   { background: #d1fae5; color: #065f46; }
+    .status-badge.inactive { background: #f3f4f6; color: #6b7280; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    /* API key section */
+    .key-input-wrap { position: relative; }
+    .key-input {
+      width: 100%;
+      padding: 9px 36px 9px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      outline: none;
+      transition: border 0.15s;
+      color: #111827;
+    }
+    .key-input:focus { border-color: #4f46e5; }
+    .key-toggle {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: #9ca3af;
+      padding: 2px;
+    }
+    .key-toggle:hover { color: #4f46e5; }
+
+    .save-btn {
+      width: 100%;
+      padding: 9px;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .save-btn:hover { opacity: 0.88; }
+    .save-btn:disabled { opacity: 0.5; cursor: default; }
+
+    .feedback {
+      font-size: 12px;
+      text-align: center;
+      min-height: 16px;
+      font-weight: 500;
+    }
+    .feedback.ok  { color: #10b981; }
+    .feedback.err { color: #ef4444; }
+
+    .divider { height: 1px; background: #e5e7eb; }
+
+    .hint {
+      font-size: 11px;
+      color: #9ca3af;
+      line-height: 1.5;
+    }
+    .hint a { color: #4f46e5; text-decoration: none; }
+    .hint a:hover { text-decoration: underline; }
+
+    .sites { display: flex; flex-direction: column; gap: 6px; }
+    .site-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #374151; }
+    .site-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; flex-shrink: 0; }
+
+    .version { font-size: 10px; color: #d1d5db; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="logo">⚖️</span>
+    <span class="brand">Fairness Meter</span>
+  </div>
+
+  <div class="body">
+
+    <!-- Status -->
+    <div>
+      <div class="section-label">Status on this page</div>
+      <span class="status-badge inactive" id="status-badge">
+        <span class="status-dot"></span>
+        <span id="status-text">Checking…</span>
+      </span>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- API Key -->
+    <div>
+      <div class="section-label">Claude API Key</div>
+      <div class="key-input-wrap">
+        <input
+          type="password"
+          class="key-input"
+          id="api-key-input"
+          placeholder="sk-ant-api03-…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="key-toggle" id="key-toggle" title="Show/hide">👁</button>
+      </div>
+    </div>
+
+    <button class="save-btn" id="save-btn">Save Key</button>
+    <div class="feedback" id="feedback"></div>
+
+    <div class="divider"></div>
+
+    <!-- Supported sites -->
+    <div>
+      <div class="section-label">Supported Sites</div>
+      <div class="sites">
+        <div class="site-row"><span class="site-dot"></span>Yad2 (yad2.co.il)</div>
+        <div class="site-row"><span class="site-dot"></span>Facebook Marketplace</div>
+      </div>
+    </div>
+
+    <div class="hint">
+      Get a free API key at
+      <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.
+      Your key is stored locally and never leaves your device.
+    </div>
+
+    <div class="version">v1.0.0</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
