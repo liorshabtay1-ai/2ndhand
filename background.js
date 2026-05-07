@@ -46,7 +46,7 @@ const WEB_SEARCH_TOOL = {
 // ── Cache ────────────────────────────────────────────────────
 // Key = listing URL + listed price. TTL keeps prices reasonably fresh.
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
-const CACHE_PREFIX = 'fm_cache_';
+const CACHE_PREFIX = 'fm_cache_v2_'; // bump to invalidate old cache shape
 
 function cacheKey(listingUrl, listedPrice) {
   return CACHE_PREFIX + (listingUrl || '') + '::' + listedPrice;
@@ -141,11 +141,11 @@ const REPORT_TOOL = {
       sourceLabel: { type: 'string', description: 'Retailer name for sourceUrl, e.g. "KSP", "Zap"' },
       similarProduct: {
         type: 'object',
-        description: 'Alternative new product priced WITHIN the buyer\'s budget range stated in the prompt. Omit this field entirely if no in-budget alternative is found.',
+        description: 'Alternative new product. ALWAYS provide this field. Prefer a product priced inside the buyer\'s ideal budget band stated in the prompt; if no in-band match exists, pick the closest-priced product in the same category (the post-processor will tag it as out-of-budget for the user).',
         required: ['name', 'estimatedNewPrice', 'productUrl'],
         properties: {
           name: { type: 'string' },
-          estimatedNewPrice: { type: 'number', description: 'New retail price in ₪. MUST be within ±15% of the buyer\'s budget (the listed second-hand price). Out-of-range values are rejected.' },
+          estimatedNewPrice: { type: 'number', description: 'New retail price in ₪.' },
           productUrl: { type: 'string', description: 'Real working PRODUCT PAGE URL for the alternative, from web_search results.' },
         },
       },
@@ -211,22 +211,23 @@ async function handleMarketData({ productName, listedPrice, currency, imageUrl, 
   const parsed = reportBlock.input;
   const sourceUrl = applyAffiliate(parsed.sourceUrl);
 
-  // Validate similar product is within budget range (±15% of listed second-hand price).
-  // If the model returns something outside budget, drop it rather than mislead the user.
-  const budgetMin = listedPrice * 0.85;
-  const budgetMax = listedPrice * 1.15;
+  // Budget guidance: prefer ±20% of listed second-hand price.
+  // We no longer DROP out-of-budget suggestions — we surface them with a warning,
+  // because hiding them was leaving the section blank for many listings.
+  const budgetMin = listedPrice * 0.80;
+  const budgetMax = listedPrice * 1.20;
   let similarProduct = null;
   if (parsed.similarProduct) {
     const sp = parsed.similarProduct;
     const inBudget = sp.estimatedNewPrice >= budgetMin && sp.estimatedNewPrice <= budgetMax;
-    if (inBudget) {
-      similarProduct = {
-        name: sp.name,
-        estimatedNewPrice: sp.estimatedNewPrice,
-        searchUrl: applyAffiliate(sp.productUrl),
-      };
-    } else {
-      console.warn('[FM] Dropped similar product — out of budget range', {
+    similarProduct = {
+      name: sp.name,
+      estimatedNewPrice: sp.estimatedNewPrice,
+      searchUrl: applyAffiliate(sp.productUrl),
+      inBudget,
+    };
+    if (!inBudget) {
+      console.warn('[FM] Similar product out of budget range — surfaced with warning', {
         budgetMin, budgetMax, returned: sp.estimatedNewPrice, name: sp.name,
       });
     }
@@ -280,14 +281,14 @@ Follow this exact procedure:
    • Appear in your web_search results (no inventions).
    If no direct product page is verifiable, use the Zap search URL https://www.zap.co.il/search.aspx?keyword=<MODEL> as a last-resort fallback.
 
-4. Find a SIMILAR ALTERNATIVE PRODUCT — this is the most important part. Strict rules:
-   • PRICE: NEW retail price in Israel MUST be between ${currency}${budgetMin} and ${currency}${budgetMax} (±15% of the buyer's budget). NOT close to the original new price of the listed item — close to ${currency}${listedPrice}.
-   • CATEGORY: same product category as the detected item (oven → oven, vacuum → vacuum, phone → phone).
-   • SPECS: as similar as possible to the detected item's key specs (e.g. if detected is a 90cm combined gas oven, prefer 90cm combined gas ovens; if detected is a robot vacuum with mop, prefer robot vacuums with mop).
-   • Brand can differ. Tier (entry/mid/premium) can differ — match by PRICE first, specs second.
-   • Use web_search to find this product (e.g. "תנור משולב 90 ${currency}${budgetMax}", "robot vacuum mop ${currency}${budgetMax} ksp"). Verify the price actually falls in [${budgetMin}, ${budgetMax}] from the search snippets before submitting.
-   • If you cannot find a real product within this price range that is in the same category, OMIT the similarProduct field entirely. Do NOT relax the price constraint to fill it.
-   • Same URL rules as step 3: real product page from search results.
+4. Find a SIMILAR ALTERNATIVE PRODUCT — ALWAYS provide one. Procedure:
+   • IDEAL price band: ${currency}${budgetMin} to ${currency}${budgetMax} (the buyer's budget — close to ${currency}${listedPrice}). Try this band FIRST and hardest.
+   • Same product category as the detected item (oven → oven, vacuum → vacuum, phone → phone).
+   • Specs as similar as possible (e.g. 90cm combined gas oven → 90cm combined gas oven; robot vacuum with mop → robot vacuum with mop).
+   • Brand and tier (entry/mid/premium) can differ — match by PRICE first, specs second.
+   • Use web_search to find it (e.g. "תנור משולב 90 ${currency}${budgetMax}", "robot vacuum mop ksp"). Verify the price falls in the ideal band from the search snippets.
+   • FALLBACK if no in-band match exists: pick the closest-priced product in the same category — entry-level if the listing is mid/premium, or a smaller spec if necessary. Do not skip this field. The post-processor will tag out-of-band products with a warning to the user.
+   • Same URL rules as step 3: real product page from web_search results.
 
 5. Call the report_analysis tool exactly ONCE. \`reasoning\` must be HEBREW, max 2 short sentences, include the % below the listed item's new price.
 

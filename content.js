@@ -400,12 +400,12 @@
           <div class="fm-reasoning" id="fm-reasoning" style="display:none">
             <div class="fm-divider"></div>
             <div class="fm-reasoning-label">Why this score?</div>
-            <div class="fm-reasoning-text" id="fm-reasoning-text"></div>
+            <div class="fm-reasoning-text" id="fm-reasoning-text" dir="auto"></div>
           </div>
 
           <div class="fm-similar" id="fm-similar" style="display:none">
             <div class="fm-divider"></div>
-            <div class="fm-similar-text" id="fm-similar-text"></div>
+            <div class="fm-similar-text" id="fm-similar-text" dir="auto"></div>
             <a class="fm-similar-link" id="fm-similar-link" target="_blank" rel="noopener noreferrer">
               Search this product →
             </a>
@@ -574,17 +574,38 @@
     const similarEl = el('fm-similar');
     const similarText = el('fm-similar-text');
     const similarLink = el('fm-similar-link');
-    if (similarEl && market.similarProduct) {
-      const { name, searchUrl } = market.similarProduct;
+    if (similarEl) {
       similarEl.style.display = 'block';
-      if (similarText) {
-        similarText.textContent = `אם התקציב שלך הוא ${market.currency}${listedPrice.toLocaleString()}, שווה לבדוק את ${name} — חדש במחיר דומה.`;
-      }
-      if (similarLink && searchUrl) {
-        similarLink.href = searchUrl;
-        similarLink.textContent = `🔍 ${name} →`;
+      if (market.similarProduct) {
+        const { name, searchUrl, estimatedNewPrice, inBudget } = market.similarProduct;
+        const priceStr = `${market.currency}${Number(estimatedNewPrice).toLocaleString()}`;
+        if (similarText) {
+          // Build innerHTML so the price/warning badge can be styled
+          const warning = inBudget
+            ? ''
+            : `<span class="fm-similar-warning">חורג מהתקציב</span>`;
+          similarText.innerHTML = inBudget
+            ? `${warning}חלופה חדשה בתקציב שלך: <b>${escapeHtml(name)}</b> ב-<span class="fm-similar-price">${priceStr}</span>.`
+            : `${warning}לא נמצאה חלופה חדשה בדיוק בתקציב. הקרוב ביותר: <b>${escapeHtml(name)}</b> ב-<span class="fm-similar-price">${priceStr}</span>.`;
+        }
+        if (similarLink && searchUrl) {
+          similarLink.href = searchUrl;
+          similarLink.textContent = `🛒 ${name} →`;
+          similarLink.style.display = 'inline-flex';
+        }
+      } else {
+        if (similarText) {
+          similarText.innerHTML = `לא נמצאה חלופה חדשה בטווח התקציב שלך (${market.currency}${listedPrice.toLocaleString()}).`;
+        }
+        if (similarLink) similarLink.style.display = 'none';
       }
     }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[c]);
   }
 
   function renderError(msg) {
